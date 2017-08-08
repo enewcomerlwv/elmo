@@ -4,12 +4,13 @@ module OdkHelper
 
   # given a Subquestion object, builds an odk <input> tag
   # calls the provided block to get the tag content
-  def odk_input_tag(qing, subq, opts, group_id = nil, &block)
-    group = group_id ? "grp-#{group_id}":nil
+  def odk_input_tag(qing, subq, opts, group = nil, xpath_prefix, &block)
     opts ||= {}
-    opts[:ref] = ["/data", group, subq.try(:odk_code)].compact.join("/")
+    opts[:ref] = [xpath_prefix, subq.try(:odk_code)].compact.join("/")
     opts[:rows] = 5 if subq.qtype_name == "long_text"
-    opts[:query] = multilevel_option_nodeset_ref(qing, subq, group) if !subq.first_rank? && subq.qtype.name == "select_one"
+    if !subq.first_rank? && subq.qtype.name == "select_one"
+      opts[:query] = multilevel_option_nodeset_ref(qing, subq, group.try(:odk_code), xpath_prefix)
+    end
     opts[:appearance] = odk_media_appearance(subq) if subq.qtype.multimedia?
     opts[:mediatype] = odk_media_type(subq) if subq.qtype.multimedia?
     content_tag(odk_input_tagname(subq), opts, &block)
@@ -88,9 +89,9 @@ module OdkHelper
 
   # generator for binding portion of xml.
   # note: _required is used to get around the 'required' html attribute
-  def question_binding(form, qing, subq, group: nil)
+  def question_binding(form, qing, subq, group: nil, xpath_prefix: "/data")
     tag(:bind, {
-      "nodeset" => ["/data", group, subq.try(:odk_code)].compact.join("/"),
+      "nodeset" => [xpath_prefix, subq.try(:odk_code)].compact.join("/"),
       "type" => binding_type_attrib(subq),
       "_required" => qing.required? && subq.first_rank? ? required_value(form) : nil,
       "relevant" => qing.has_condition? ? qing.condition.to_odk : nil,
@@ -100,9 +101,9 @@ module OdkHelper
   end
 
   # note: _readonly is used to get around the 'readonly' html attribute
-  def note_binding(group)
+  def note_binding(group, xpath_prefix)
     tag(:bind, {
-      "nodeset" => "/data/grp-#{group.id}/grp-header#{group.id}",
+      "nodeset" => "#{xpath_prefix}/#{group.odk_code}-header",
       "_readonly" => "true()",
       "type" => "string"
     }.reject { |k,v| v.nil? }).gsub(/_readonly=/, "readonly=").html_safe
@@ -139,12 +140,12 @@ module OdkHelper
   # E.g. instance('os16')/root/item or
   #      instance('os16')/root/item[parent_id=/data/q2_1] or
   #      instance('os16')/root/item[parent_id=/data/q2_2]
-  def multilevel_option_nodeset_ref(qing, cur_subq, group = nil)
+  def multilevel_option_nodeset_ref(qing, cur_subq, group_code = nil, xpath_prefix)
     filter = if cur_subq.first_rank?
       ""
     else
       code = cur_subq.odk_code(previous: true)
-      path = ["/data", group, code].compact.join("/")
+      path = [xpath_prefix, code].compact.join("/")
       "[parent_id=#{path}]"
     end
     "instance('os#{qing.option_set_id}')/root/item#{filter}"
@@ -160,6 +161,27 @@ module OdkHelper
       end
     end
     odk_options.reduce(&:concat)
+  end
+
+  def odk_group(node, xpath_prefix, &block)
+    if node.is_a?(QingGroup)
+      xpath = "#{xpath_prefix}/#{node.odk_code}"
+      content_tag(:group) do
+        content_tag(:label, node.group_name) <<
+        if node.repeatable?
+          node_id_string = "#{xpath_prefix}/#{node.odk_code}"
+          content_tag(:repeat, odk_group_inner(node, xpath), nodeset: node_id_string)
+        else
+          odk_group_inner(node, xpath)
+        end
+      end
+    else
+      odk_group_inner(node, xpath_prefix)
+    end
+  end
+
+  def odk_group_inner(node, xpath)
+    render("forms/odk/group_inner", node: node, xpath: xpath)
   end
 
   # Tests if all items in the group are Questionings with the same type and option set.
