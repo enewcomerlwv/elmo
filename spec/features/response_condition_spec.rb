@@ -2,168 +2,184 @@ require "spec_helper"
 
 feature "conditions in responses", js: true do
   let(:user) { create(:user) }
-  let!(:form) { create(:form) }
-  let!(:questionings) do
-    {
-      long_text: create_questioning("long_text", form),
-      text1: create_questioning("text", form),
-      integer: create_questioning("integer", form),
-      counter: create_questioning("counter", form),
-      text2: create_questioning("text", form),
-      decimal: create_questioning("decimal", form),
-      select_one: create_questioning("select_one", form),
-      multilevel_select_one: create_questioning("multilevel_select_one", form),
-      geo_multilevel_select_one: create_questioning("geo_multilevel_select_one", form),
-      select_multiple: create_questioning("select_multiple", form),
-      datetime: create_questioning("datetime", form),
-      date: create_questioning("date", form),
-      time: create_questioning("time", form),
-      text3: create_questioning("text", form)
-    }
-  end
-  let!(:so_option_set) { questionings[:select_one].option_set }
-  let!(:ml_option_set) { questionings[:multilevel_select_one].option_set }
-  let!(:geo_option_set) { questionings[:geo_multilevel_select_one].option_set }
-  let!(:multi_option_set) { questionings[:select_multiple].option_set }
-  let!(:conditions) do
-    {
-      text1_if_long_text: questionings[:text1].create_condition(
-        ref_qing: questionings[:long_text], op: "eq", value: "foo"),
-      integer_if_text1: questionings[:integer].create_condition(
-        ref_qing: questionings[:text1], op: "neq", value: "bar"),
-      counter_if_integer: questionings[:counter].create_condition(
-        ref_qing: questionings[:integer], op: "gt", value: "10"),
-      decimal_if_counter: questionings[:decimal].create_condition(
-        ref_qing: questionings[:counter], op: "gt", value: "5"),
-      select_one_if_decimal: questionings[:select_one].create_condition(
-        ref_qing: questionings[:decimal], op: "eq", value: "21.72"),
-      ml_select_one_if_select_one: questionings[:multilevel_select_one].create_condition(
-        ref_qing: questionings[:select_one],
-        op: "eq",
-        option_node: so_option_set.children.detect { |c| c.option_name == "Dog" }),
-      geo_select_one_if_ml_select_one: questionings[:geo_multilevel_select_one].create_condition(
-        ref_qing: questionings[:multilevel_select_one],
-        op: "eq",
-        option_node: ml_option_set.children.
-          detect { |c| c.option_name == "Plant" }.children.
-          detect { |c| c.option_name == "Tulip" }),
-      select_multiple_if_geo_select_one: questionings[:select_multiple].create_condition(
-        ref_qing: questionings[:geo_multilevel_select_one],
-        op: "eq",
-        option_node: geo_option_set.children.detect { |c| c.option_name == "Canada" }),
-      datetime_if_select_multiple: questionings[:datetime].create_condition(
-        ref_qing: questionings[:select_multiple],
-        op: "inc",
-        option_node: multi_option_set.children.detect { |c| c.option_name == "Cat" }),
-      date_if_datetime: questionings[:date].create_condition(
-        ref_qing: questionings[:datetime], op: "lt", value: "#{year}-01-01 5:00:21"),
-      time_if_date: questionings[:time].create_condition(
-        ref_qing: questionings[:date], op: "eq", value: "#{year}-03-22"),
-      text3_if_time: questionings[:text3].create_condition(
-        ref_qing: questionings[:time], op: "geq", value: "3:00pm")
-    }
-  end
+  let(:form) { create(:form) }
   let(:year) { Time.now.year - 2 }
-  let(:form_questionings) { form.questionings }
 
-
-  scenario "should work" do
+  before do
+    qings # Ensure qings get created first.
     login(user)
     visit(new_response_path(locale: "en", mode: "m", mission_name: get_mission.compact_name, form_id: form.id))
     expect(page).to have_content("New Response")
-
-    # fill in answers
-    visible_qings = [:long_text, :text2]
-
-    fill_answer_and_expect_visible(
-      questioning: questionings[:long_text], value: "fo", visible: visible_qings)
-
-    fill_answer_and_expect_visible(
-      questioning: questionings[:long_text], value: "foo", visible: visible_qings << :text1)
-
-    fill_answer_and_expect_visible(
-      questioning: questionings[:text1], value: "bar", visible: visible_qings)
-
-    fill_answer_and_expect_visible(
-      questioning: questionings[:text1], value: "barz", visible: visible_qings << :integer)
-
-    fill_answer_and_expect_visible(
-      questioning: questionings[:integer], value: "10", visible: visible_qings)
-
-    fill_answer_and_expect_visible(
-      questioning: questionings[:integer], value: "11", visible: visible_qings << :counter)
-
-    fill_answer_and_expect_visible(
-      questioning: questionings[:counter], value: "5", visible: visible_qings)
-
-    fill_answer_and_expect_visible(
-      questioning: questionings[:counter], value: "6", visible: visible_qings << :decimal)
-
-    fill_answer_and_expect_visible(
-      questioning: questionings[:decimal], value: "21.7", visible: visible_qings)
-
-    fill_answer_and_expect_visible(
-      questioning: questionings[:decimal], value: "21.72", visible: visible_qings << :select_one)
-
-    fill_answer_and_expect_visible(
-      questioning: questionings[:select_one], value: "Cat", visible: visible_qings)
-
-    fill_answer_and_expect_visible(
-      questioning: questionings[:select_one], value: "Dog", visible: visible_qings << :multilevel_select_one)
-
-    fill_answer_and_expect_visible(
-      questioning: questionings[:multilevel_select_one], value: ["Plant"], visible: visible_qings)
-
-    fill_answer_and_expect_visible(
-      questioning: questionings[:multilevel_select_one], value: ["Plant", "Oak"], visible: visible_qings)
-
-    fill_answer_and_expect_visible(
-      questioning: questionings[:multilevel_select_one],
-      value: ["Plant", "Tulip"],
-      visible: visible_qings << :geo_multilevel_select_one)
-
-    fill_answer_and_expect_visible(
-      questioning: questionings[:geo_multilevel_select_one],
-      value: ["Ghana"],
-      visible: visible_qings)
-
-    fill_answer_and_expect_visible(
-      questioning: questionings[:geo_multilevel_select_one],
-      value: ["Canada"],
-      visible: visible_qings << :select_multiple)
-
-    fill_answer_and_expect_visible(
-      questioning: questionings[:geo_multilevel_select_one],
-      value: ["Canada", "Ottawa"],
-      visible: visible_qings)
-
-    fill_answer_and_expect_visible(
-      questioning: questionings[:select_multiple], value: ["Dog"], visible: visible_qings)
-
-    fill_answer_and_expect_visible(
-      questioning: questionings[:select_multiple], value: ["Dog", "Cat"], visible: visible_qings << :datetime)
-
-    fill_answer_and_expect_visible(
-      questioning: questionings[:datetime], value: "#{year}-01-01 5:00:21", visible: visible_qings)
-
-    fill_answer_and_expect_visible(
-      questioning: questionings[:datetime], value: "#{year}-01-01 5:00:20", visible: visible_qings << :date)
-
-    fill_answer_and_expect_visible(
-      questioning: questionings[:date], value: "#{year}-03-21", visible: visible_qings)
-
-    fill_answer_and_expect_visible(
-      questioning: questionings[:date], value: "#{year}-03-22", visible: visible_qings << :time)
-
-    fill_answer_and_expect_visible(
-      questioning: questionings[:time], value: "6:00:00", visible: visible_qings)
-
-    fill_answer_and_expect_visible(
-      questioning: questionings[:time], value: "15:00:00", visible: visible_qings << :text3)
   end
 
-  def fill_answer_and_expect_visible(questioning: nil, value: nil, visible: nil)
-    fill_answer(qing: questioning, value: value)
+  describe "different question types" do
+    let!(:qings) do
+      {}.tap do |qings|
+        qings[:long_text] = create_questioning("long_text", form)
+
+        qings[:text1] = create_questioning("text", form, display_if: "all_met",
+          display_conditions_attributes: [
+            {ref_qing_id: qings[:long_text].id, op: "eq", value: "foo"}
+        ])
+
+        qings[:integer] = create_questioning("integer", form, display_if: "all_met",
+          display_conditions_attributes: [
+            {ref_qing_id: qings[:text1].id, op: "neq", value: "bar"}
+        ])
+
+        qings[:counter] = create_questioning("counter", form, display_if: "all_met",
+          display_conditions_attributes: [
+            {ref_qing_id: qings[:integer].id, op: "gt", value: "10"}
+        ])
+
+        qings[:text2] = create_questioning("text", form)
+
+        qings[:decimal] = create_questioning("decimal", form, display_if: "all_met",
+          display_conditions_attributes: [
+            {ref_qing_id: qings[:counter].id, op: "gt", value: "5"}
+        ])
+
+        qings[:select_one] = create_questioning("select_one", form, display_if: "all_met",
+          display_conditions_attributes: [
+            {ref_qing_id: qings[:decimal].id, op: "eq", value: "21.72"}
+        ])
+
+        oset = qings[:select_one].option_set
+        qings[:mlev_sel_one] = create_questioning("multilevel_select_one", form, display_if: "all_met",
+          display_conditions_attributes: [
+            {ref_qing_id: qings[:select_one].id, op: "eq", option_node_id: oset.node("Dog").id}
+        ])
+
+        oset = qings[:mlev_sel_one].option_set
+        qings[:geo_sel_one] = create_questioning("geo_multilevel_select_one", form, display_if: "all_met",
+          display_conditions_attributes: [
+            {ref_qing_id: qings[:mlev_sel_one].id, op: "eq", option_node_id: oset.node("Plant", "Tulip").id}
+        ])
+
+        oset = qings[:geo_sel_one].option_set
+        qings[:select_multiple] = create_questioning("select_multiple", form, display_if: "all_met",
+          display_conditions_attributes: [
+            {ref_qing_id: qings[:geo_sel_one].id, op: "eq", option_node_id: oset.node("Canada").id}
+        ])
+
+        oset = qings[:select_multiple].option_set
+        qings[:datetime] = create_questioning("datetime", form, display_if: "all_met",
+          display_conditions_attributes: [
+            {ref_qing_id: qings[:select_multiple].id, op: "inc", option_node_id: oset.node("Cat").id}
+        ])
+
+        qings[:date] = create_questioning("date", form, display_if: "all_met",
+          display_conditions_attributes: [
+            {ref_qing_id: qings[:datetime].id, op: "lt", value: "#{year}-01-01 5:00:21"}
+        ])
+
+        qings[:time] = create_questioning("time", form, display_if: "all_met",
+          display_conditions_attributes: [
+            {ref_qing_id: qings[:date].id, op: "eq", value: "#{year}-03-22"}
+        ])
+
+        qings[:text3] = create_questioning("text", form, display_if: "all_met",
+          display_conditions_attributes: [
+            {ref_qing_id: qings[:time].id, op: "geq", value: "3:00pm"}
+        ])
+      end
+    end
+
+    scenario "should work" do
+      visible = [:long_text, :text2]
+      fill_and_expect_visible(:long_text, "fo", visible)
+
+      # integer also becomes available here because it depends on text1 not being bar,
+      # which it isn't at first, because "" != "bar"
+      fill_and_expect_visible(:long_text, "foo", visible << :text1 << :integer)
+
+      fill_and_expect_visible(:text1, "bar", visible - [:integer])
+      fill_and_expect_visible(:text1, "barz", visible << :integer)
+      fill_and_expect_visible(:integer, "10", visible)
+      fill_and_expect_visible(:integer, "11", visible << :counter)
+      fill_and_expect_visible(:counter, "5", visible)
+      fill_and_expect_visible(:counter, "6", visible << :decimal)
+      fill_and_expect_visible(:decimal, "21.7", visible)
+      fill_and_expect_visible(:decimal, "21.72", visible << :select_one)
+      fill_and_expect_visible(:select_one, "Cat", visible)
+      fill_and_expect_visible(:select_one, "Dog", visible << :mlev_sel_one)
+      fill_and_expect_visible(:mlev_sel_one, ["Plant"], visible)
+      fill_and_expect_visible(:mlev_sel_one, ["Plant", "Oak"], visible)
+      fill_and_expect_visible(:mlev_sel_one, ["Plant", "Tulip"], visible << :geo_sel_one)
+      fill_and_expect_visible(:geo_sel_one, ["Ghana"], visible)
+      fill_and_expect_visible(:geo_sel_one, ["Canada"], visible << :select_multiple)
+      fill_and_expect_visible(:geo_sel_one, ["Canada", "Ottawa"], visible)
+      fill_and_expect_visible(:select_multiple, ["Dog"], visible)
+      fill_and_expect_visible(:select_multiple, ["Dog", "Cat"], visible << :datetime)
+      fill_and_expect_visible(:datetime, "#{year}-01-01 5:00:21", visible)
+      fill_and_expect_visible(:datetime, "#{year}-01-01 5:00:20", visible << :date)
+      fill_and_expect_visible(:date, "#{year}-03-21", visible)
+      fill_and_expect_visible(:date, "#{year}-03-22", visible << :time)
+      fill_and_expect_visible(:time, "6:00:00", visible)
+      fill_and_expect_visible(:time, "15:00:00", visible << :text3)
+    end
+  end
+
+  describe "display_if logic" do
+    let!(:qings) do
+      {}.tap do |qings|
+        qings[:q1] = create_questioning("integer", form)
+        qings[:q2] = create_questioning("integer", form)
+        qings[:q3] = create_questioning("integer", form, display_if: display_if,
+          display_conditions_attributes: [
+            {ref_qing_id: qings[:q1].id, op: "gt", value: "10"},
+            {ref_qing_id: qings[:q2].id, op: "gt", value: "20"}
+            ])
+      end
+    end
+
+    describe "all_met" do
+      let(:display_if) { "all_met" }
+
+      scenario "should work" do
+        visible = [:q1, :q2]
+
+        fill_and_expect_visible(:q1, "10", visible)
+        fill_and_expect_visible(:q2, "20", visible)
+
+        # This satisfies the first condition but not the second, so q3 should not show yet.
+        fill_and_expect_visible(:q1, "11", visible)
+
+        # This satisfies the second condition but not the first, so q3 should still not show.
+        fill_and_expect_visible(:q1, "10", visible)
+        fill_and_expect_visible(:q2, "21", visible)
+
+        # NOW it should show!
+        fill_and_expect_visible(:q1, "11", visible << :q3)
+      end
+    end
+
+    describe "any_met" do
+      let(:display_if) { "any_met" }
+
+      scenario "should work" do
+        visible = [:q1, :q2]
+
+        fill_and_expect_visible(:q1, "10", visible)
+        fill_and_expect_visible(:q2, "20", visible)
+
+        # Satisfy one, expect visible
+        fill_and_expect_visible(:q1, "11", visible + [:q3])
+
+        # Satisfy both, expect visible
+        fill_and_expect_visible(:q2, "21", visible + [:q3])
+
+        # Unsatisfy first one, expect still visible
+        fill_and_expect_visible(:q1, "10", visible + [:q3])
+
+        # Unsatisfy second one, expect not visible
+        fill_and_expect_visible(:q2, "20", visible)
+      end
+    end
+  end
+
+  def fill_and_expect_visible(q, value, visible)
+    fill_answer(qing: qings[q], value: value)
     expect_visible(visible)
   end
 
@@ -207,11 +223,12 @@ feature "conditions in responses", js: true do
   end
 
   def expect_visible(visible_qing_names)
-    visible_qings = visible_qing_names.map { |qing_name| questionings[qing_name] }
-    visible_qing_ids = visible_qings.map(&:id)
-    form_questionings.each do |qing, i|
-      currently_visible = visible_qing_ids.include?(qing.id)
-      expect(page).to have_css("div.answer_field[data-qing-id=\"#{qing.id}\"]", visible: currently_visible)
+    visible_qing_ids = visible_qing_names.map { |qing_name| qings[qing_name].id }
+    qings.each do |key, qing|
+      visible = visible_qing_ids.include?(qing.id)
+      expect(page).send(visible ? :to : :not_to,
+        have_css("div.answer_field[data-qing-id=\"#{qing.id}\"]", visible: true),
+        "Expected #{key} #{visible ? '' : 'not '}to be visible at this point")
     end
   end
 end
